@@ -21,7 +21,6 @@ jobs:
       SNOWFLAKE_WAREHOUSE: ${{ secrets.SNOWFLAKE_WAREHOUSE }}
       SNOWFLAKE_DATABASE: CLIMBERS_CI_${{ github.event.pull_request.number || github.run_id }}
       SNOWFLAKE_SCHEMA: ANALYTICS
-      SNOWFLAKE_PRIVATE_KEY_PATH: ${{ runner.temp }}/climbers_svc_key.p8
       SNOWFLAKE_PRIVATE_KEY_PASSPHRASE: ${{ secrets.SNOWFLAKE_PRIVATE_KEY_PASSPHRASE }}
     steps:
       - uses: actions/checkout@v4
@@ -40,8 +39,10 @@ jobs:
         env:
           SNOWFLAKE_PRIVATE_KEY: ${{ secrets.SNOWFLAKE_PRIVATE_KEY }}
         run: |
+          key_path="$RUNNER_TEMP/climbers_svc_key.p8"
           umask 077
-          printf '%s' "$SNOWFLAKE_PRIVATE_KEY" > "$SNOWFLAKE_PRIVATE_KEY_PATH"
+          printf '%s' "$SNOWFLAKE_PRIVATE_KEY" > "$key_path"
+          echo "SNOWFLAKE_PRIVATE_KEY_PATH=$key_path" >> "$GITHUB_ENV"
 
       - name: Create zero-copy clone
         run: >-

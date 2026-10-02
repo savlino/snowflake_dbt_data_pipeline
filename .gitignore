@@ -20,5 +20,3 @@ dbt/dbt_packages/
 .idea/
 .DS_Store
 Thumbs.db
-logs/dbt.log
-logs/query_log.sql
