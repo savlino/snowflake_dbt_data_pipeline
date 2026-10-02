@@ -44,6 +44,9 @@ jobs:
           printf '%s' "$SNOWFLAKE_PRIVATE_KEY" > "$key_path"
           echo "SNOWFLAKE_PRIVATE_KEY_PATH=$key_path" >> "$GITHUB_ENV"
 
+      - name: Configure dbt profile
+        run: cp dbt/profiles.yml.example dbt/profiles.yml
+
       - name: Create zero-copy clone
         run: >-
           python scripts/ci_clone_db.py create
