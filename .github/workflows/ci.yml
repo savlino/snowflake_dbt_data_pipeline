@@ -1,0 +1,61 @@
+name: Snowflake dbt CI
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: climbers-dbt-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  dbt-build:
+    runs-on: ubuntu-latest
+    env:
+      SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
+      SNOWFLAKE_USER: ${{ secrets.SNOWFLAKE_USER }}
+      SNOWFLAKE_ROLE: ${{ secrets.SNOWFLAKE_ROLE }}
+      SNOWFLAKE_WAREHOUSE: ${{ secrets.SNOWFLAKE_WAREHOUSE }}
+      SNOWFLAKE_DATABASE: CLIMBERS_CI_${{ github.event.pull_request.number || github.run_id }}
+      SNOWFLAKE_SCHEMA: ANALYTICS
+      SNOWFLAKE_PRIVATE_KEY_PATH: ${{ runner.temp }}/climbers_svc_key.p8
+      SNOWFLAKE_PRIVATE_KEY_PASSPHRASE: ${{ secrets.SNOWFLAKE_PRIVATE_KEY_PASSPHRASE }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements-dev.txt dbt-snowflake
+
+      - name: Write service private key
+        shell: bash
+        env:
+          SNOWFLAKE_PRIVATE_KEY: ${{ secrets.SNOWFLAKE_PRIVATE_KEY }}
+        run: |
+          umask 077
+          printf '%s' "$SNOWFLAKE_PRIVATE_KEY" > "$SNOWFLAKE_PRIVATE_KEY_PATH"
+
+      - name: Create zero-copy clone
+        run: >-
+          python scripts/ci_clone_db.py create
+          --suffix "${{ github.event.pull_request.number || github.run_id }}"
+
+      - name: Install dbt packages
+        run: dbt deps --project-dir dbt --profiles-dir dbt
+
+      - name: Build and test clone
+        run: dbt build --project-dir dbt --profiles-dir dbt
+
+      - name: Drop zero-copy clone
+        if: always()
+        run: >-
+          python scripts/ci_clone_db.py drop
+          --suffix "${{ github.event.pull_request.number || github.run_id }}"

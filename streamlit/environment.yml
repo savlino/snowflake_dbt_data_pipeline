@@ -1,0 +1,6 @@
+name: climbers_streamlit
+channels:
+  - snowflake
+dependencies:
+  - streamlit
+  - pandas
