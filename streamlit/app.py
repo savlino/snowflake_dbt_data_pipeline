@@ -29,7 +29,9 @@ except Exception:
 
 data.columns = data.columns.str.lower()
 countries = sorted(data["country"].dropna().astype(str).unique().tolist())
-sexes = sorted(data["sex"].dropna().astype(str).unique().tolist())
+available_sexes = set(data["sex"].dropna().astype(str).unique().tolist())
+sexes = [sex for sex in ("M", "F") if sex in available_sexes]
+sexes.extend(sorted(available_sexes - set(sexes)))
 
 with st.sidebar:
     st.header("Filters")
@@ -44,34 +46,47 @@ filtered = data.loc[
 ].copy()
 
 total_climbers = int(filtered["climber_count"].sum())
-if total_climbers:
-    average_grade = (
-        filtered["avg_grade_numeric"] * filtered["climber_count"]
-    ).sum() / total_climbers
-else:
-    average_grade = 0.0
+num_countries = filtered["country"].nunique()
 
 metric_columns = st.columns(2)
 metric_columns[0].metric("Climbers", f"{total_climbers:,}")
-metric_columns[1].metric("Average grade", f"{average_grade:.2f}")
+metric_columns[1].metric("Countries", f"{num_countries:,}")
 
 st.subheader("Climbers by country and sex")
 if filtered.empty:
     st.info("No rows match the selected filters.")
 else:
-    chart_data = filtered.sort_values("climber_count", ascending=False)
+    chart_sexes = [sex for sex in sexes if sex in selected_sexes]
+    chart_data = filtered.pivot_table(
+        index="country",
+        columns="sex",
+        values="climber_count",
+        aggfunc="sum",
+        fill_value=0,
+    ).reindex(columns=chart_sexes, fill_value=0)
+    chart_data = chart_data.reset_index()
+    country_totals = data.groupby("country")["climber_count"].sum()
+    chart_data["country_total"] = chart_data["country"].map(country_totals)
+    chart_colors = [
+        {"M": "#0072B2", "F": "#D55E00"}.get(sex, "#666666")
+        for sex in chart_sexes
+    ]
     st.bar_chart(
         chart_data,
         x="country",
-        y="climber_count",
-        color="sex",
+        y=chart_sexes,
+        color=chart_colors,
+        horizontal=True,
         stack=False,
+        sort="-country_total",
         height=360,
     )
 
 st.subheader("Country and sex details")
+table_data = filtered.copy()
+table_data["sex"] = pd.Categorical(table_data["sex"], categories=sexes, ordered=True)
 st.dataframe(
-    filtered.sort_values(["country", "sex"]).reset_index(drop=True),
+    table_data.sort_values(["country", "sex"]).reset_index(drop=True),
     use_container_width=True,
     hide_index=True,
 )

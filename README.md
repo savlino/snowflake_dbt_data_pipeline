@@ -17,6 +17,9 @@ flowchart LR
 
     CSV --> LOADER --> STAGE --> RAW --> STAGING --> INTERMEDIATE --> MART --> APP
 ```
+Catalog structure in Snowsight — raw tables with their stage and file format, staging views, and the analytics mart, all under `CLIMBERS_DB`:
+
+![Snowflake catalog structure](assets/catalog_structure.png)
 
 ## Prerequisites
 
@@ -102,6 +105,10 @@ dbt materializes staging models as views, the intermediate model as ephemeral, a
 - `max_grade_label`
 - `max_grade_climber_count`
 
+Copy history for the `CLIMBERS` raw table, confirming the file was loaded once with the expected row count:
+
+![Copy history for CLIMBERS](assets/climbers_copy_history.png)
+
 ## Sample Output
 
 The checked-in files are the sample export artifacts. The CSV currently contains 52 country/sex rows; regenerate both files after a Snowflake `dbt build` to refresh them from the live mart. The exporter supports `--limit <rows>` to restrict the CSV rows used for the export.
@@ -109,16 +116,20 @@ The checked-in files are the sample export artifacts. The CSV currently contains
 - [CSV: climber_country_sex_stats.csv](sample_output/climber_country_sex_stats.csv)
 - [Chart: top_countries_by_climbers.png](sample_output/top_countries_by_climbers.png)
 
+The same result set, queried live in Snowsight:
+
+![climber_country_sex_stats live in Snowsight](assets/climber_country_sex_stats_live.png)
+
 ```powershell
 .\.venv\Scripts\python.exe scripts\export_sample_output.py
 .\.venv\Scripts\python.exe scripts\export_sample_output.py --limit 10
 ```
 
-Generated from a live pipeline run on <DATE>.
+Generated from a live pipeline run on 2026-10-02.
 
 ### Streamlit App Screenshot
 
-Screenshot placeholder: add the deployed app image at `assets/streamlit_app.png`.
+![Streamlit app in Snowsight](assets/streamlit_app.png)
 
 ## Tests
 
@@ -135,6 +146,10 @@ Run `dbt test --project-dir dbt --profiles-dir dbt` separately when only the tes
 ## CI
 
 The GitHub Actions workflow runs on `pull_request` and `workflow_dispatch`. It creates a zero-copy clone named `CLIMBERS_CI_<suffix>`, sets `SNOWFLAKE_DATABASE` to that clone, runs `dbt deps` and `dbt build`, then attempts to drop the clone in an `if: always()` step. PR runs are serialized by concurrency group. The dbt source definition uses `target.database`, allowing it to resolve raw tables from the clone instead of the production database.
+
+A successful PR run: `dbt build` and tests execute against the zero-copy clone, which is then dropped in the cleanup step:
+
+![GitHub Actions CI run on a Snowflake clone](assets/github_actions_run_result.png)
 
 Configure these repository secrets:
 
@@ -159,16 +174,25 @@ To deploy from Snowsight, open **Projects > Streamlit > + Streamlit App**, creat
 - **Isolated CI with zero-copy clones.** Each PR gets a separate clone of the source database without a second full storage copy, keeping CI changes away from the main database.
 - **Time Travel for the mart.** Snowflake can query an earlier table state within the configured retention window:
 
-  ```sql
-  SELECT *
+```sql
+  SELECT COUNT(*)
   FROM CLIMBERS_DB.ANALYTICS.CLIMBER_COUNTRY_SEX_STATS
-  AT (TIMESTAMP => '<TIMESTAMP>'::TIMESTAMP_LTZ);
-  ```
+  AT(OFFSET => -3600);
+```
 
-  Query output placeholder: replace with a result captured from Snowflake.
+  ![Time Travel query result](assets/time_travel_query.png)
 
 - **Streamlit alongside the data.** The app runs in Snowflake and uses its active session, without separate app hosting or separate database credentials.
 - **Exact aggregation and scoped access.** The mart uses exact `MEDIAN`; the service user authenticates with a key pair and receives a dedicated role for RBAC.
+- **Separate storage and compute.** The project uses a dedicated XSMALL warehouse with auto-suspend after 60 seconds and auto-resume, tracked separately from the account's default warehouse in Cost Management. A monthly five-credit resource monitor caps spend on the warehouse:
+
+  ![Snowflake cost breakdown by warehouse](assets/cost_management.png)
+
+```sql
+  SHOW RESOURCE MONITORS;
+```
+
+  ![CLIMBERS_RM resource monitor](assets/resource_monitor.png)
 
 ## Related Implementations
 
@@ -182,9 +206,16 @@ To deploy from Snowsight, open **Projects > Streamlit > + Streamlit App**, creat
 
 ```text
 .
-├── .env.example
 ├── .github/workflows/ci.yml
 ├── assets/
+│   ├── catalog_structure.png
+│   ├── climber_country_sex_stats_live.png
+│   ├── climbers_copy_history.png
+│   ├── cost_management.png
+│   ├── github_actions_run_result.png
+│   ├── resource_monitor.png
+│   ├── streamlit_app.png
+│   └── time_travel_query.png
 ├── dbt/
 │   ├── models/
 │   │   ├── intermediate/int_climbers_transformed.sql
@@ -198,7 +229,8 @@ To deploy from Snowsight, open **Projects > Streamlit > + Streamlit App**, creat
 │   └── tests/
 │       ├── assert_climber_country_sex_stats_unique.sql
 │       └── assert_grade_id_within_source_range.sql
-├── loaders/load_to_snowflake.py
+├── loaders/
+│   └── load_to_snowflake.py
 ├── sample_output/
 │   ├── climber_country_sex_stats.csv
 │   └── top_countries_by_climbers.png
@@ -209,7 +241,9 @@ To deploy from Snowsight, open **Projects > Streamlit > + Streamlit App**, creat
 ├── streamlit/
 │   ├── app.py
 │   └── environment.yml
+├── .env.example
 ├── .gitignore
+├── README.md
 ├── LICENSE
 └── requirements-dev.txt
 ```
