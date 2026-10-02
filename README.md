@@ -170,8 +170,18 @@ To deploy from Snowsight, open **Projects > Streamlit > + Streamlit App**, creat
 
 ## Why Snowflake + dbt
 
-- **Separate storage and compute.** The project uses a dedicated XSMALL warehouse with auto-suspend after 60 seconds and auto-resume. A monthly five-credit resource monitor suspends it at the configured limit.
+- **Separate storage and compute.** The project uses a dedicated XSMALL warehouse with auto-suspend after 60 seconds and auto-resume, tracked separately from the account's default warehouse in Cost Management. A monthly five-credit resource monitor caps spend on the warehouse:
+
+  ![Snowflake cost breakdown by warehouse](assets/cost_management.png)
+
+```sql
+  SHOW RESOURCE MONITORS;
+```
+
+  ![CLIMBERS_RM resource monitor](assets/resource_monitor.png)
+
 - **Isolated CI with zero-copy clones.** Each PR gets a separate clone of the source database without a second full storage copy, keeping CI changes away from the main database.
+
 - **Time Travel for the mart.** Snowflake can query an earlier table state within the configured retention window:
 
 ```sql
@@ -183,16 +193,8 @@ To deploy from Snowsight, open **Projects > Streamlit > + Streamlit App**, creat
   ![Time Travel query result](assets/time_travel_query.png)
 
 - **Streamlit alongside the data.** The app runs in Snowflake and uses its active session, without separate app hosting or separate database credentials.
+
 - **Exact aggregation and scoped access.** The mart uses exact `MEDIAN`; the service user authenticates with a key pair and receives a dedicated role for RBAC.
-- **Separate storage and compute.** The project uses a dedicated XSMALL warehouse with auto-suspend after 60 seconds and auto-resume, tracked separately from the account's default warehouse in Cost Management. A monthly five-credit resource monitor caps spend on the warehouse:
-
-  ![Snowflake cost breakdown by warehouse](assets/cost_management.png)
-
-```sql
-  SHOW RESOURCE MONITORS;
-```
-
-  ![CLIMBERS_RM resource monitor](assets/resource_monitor.png)
 
 ## Related Implementations
 
